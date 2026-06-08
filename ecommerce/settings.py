@@ -32,6 +32,8 @@ DEBUG = False
 
 ALLOWED_HOSTS = [
     "e-commerce-web-application-1-5xvl.onrender.com",
+    "localhost",
+    "127.0.0.1",
 ]
 
 
@@ -46,6 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'productandcart',
     'rest_framework',
+    'drf_spectacular',
 
 ]
 
@@ -133,3 +136,11 @@ STATIC_URL = 'static/'
 CSRF_TRUSTED_ORIGINS = [
     "https://e-commerce-web-application-1-5xvl.onrender.com",
 ]
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'E-commerce API',
+    'DESCRIPTION': 'API documentation for the E-commerce application',
+    'VERSION': '1.0.0',
+}
