@@ -30,7 +30,9 @@ SECRET_KEY = 'django-insecure-+a-=f2mg9mr!-t7-6mj3gtvpk_@^bv7%v4=6wfe3k^7gr7#9w3
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = [
+    "e-commerce-web-application-1-5xvl.onrender.com",
+]
 
 
 # Application definition
@@ -127,3 +129,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://e-commerce-web-application-1-5xvl.onrender.com",
+]
