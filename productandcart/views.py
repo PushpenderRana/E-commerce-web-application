@@ -14,3 +14,14 @@ class CategoryList(APIView):
         categories = Category.objects.all()
         serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)
+    
+class ProductDetail(APIView):
+    def get(self, request, pk):
+        try:
+            product = Product.objects.get(pk=pk)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found'}, status=404)
+        
+        serializer = ProductSerializer(product)
+        return Response(serializer.data)
+    
