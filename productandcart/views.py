@@ -1,9 +1,13 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .models import Category, Product, CartItem, Cart
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from .models import Category, Product, CartItem, Cart, Order, OrderItem
 from drf_spectacular.utils import extend_schema
-from .serializers import CategorySerializer, ProductSerializer, CartItemSerializer, CartSerializer, CartRequestSerializer
+from .serializers import (
+    CategorySerializer, ProductSerializer, CartItemSerializer, CartSerializer, 
+    CartRequestSerializer, OrderSerializer, CreateOrderSerializer, OrderItemSerializer
+)
 
 
 # Helper Functions
@@ -18,9 +22,13 @@ def get_product_or_error(product_id):
         )
 
 
-def get_or_create_cart():
+def get_or_create_cart(user=None):
     """Get or create user's cart"""
-    return Cart.objects.get_or_create(user=None)[0]
+    if user and user.is_authenticated:
+        return Cart.objects.get_or_create(user=user)[0]
+    else:
+        # For anonymous users, create a session-based cart
+        return Cart.objects.get_or_create(user=None)[0]
 
 
 # Product Views
@@ -51,7 +59,7 @@ class ProductDetail(APIView):
 # Cart Views
 class CartDetail(APIView):
     def get(self, request):
-        cart = get_or_create_cart()
+        cart = get_or_create_cart(request.user)
         serializer = CartSerializer(cart)
         return Response(serializer.data)
 
@@ -69,7 +77,7 @@ class CartDetail(APIView):
         if error:
             return error
 
-        cart = get_or_create_cart()
+        cart = get_or_create_cart(request.user)
         cart_item, created = CartItem.objects.get_or_create(cart=cart, product=product)
 
         if not created:
@@ -97,7 +105,7 @@ class RemoveFromCart(APIView):
         if error:
             return error
 
-        cart = get_or_create_cart()
+        cart = get_or_create_cart(request.user)
 
         try:
             cart_item = CartItem.objects.get(
@@ -119,5 +127,99 @@ class RemoveFromCart(APIView):
         except CartItem.DoesNotExist:
             return Response(
                 {"error": "Product not in cart"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+class CreateOrder(APIView):
+    @extend_schema(
+        request=CreateOrderSerializer,
+        responses={201: OrderSerializer}
+    )
+    def post(self, request):
+        try:
+            serializer = CreateOrderSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            cart = get_or_create_cart(request.user)
+            
+            if not cart or not cart.items.exists():
+                return Response(
+                    {'error': 'Cart is empty'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Calculate total price
+            total = sum(item.product.price * item.quantity for item in cart.items.all())
+
+            # Create order
+            order = Order.objects.create(
+                user=request.user if request.user.is_authenticated else None,
+                total_price=total
+            )
+
+            # Create order items from cart items
+            for item in cart.items.all():
+                OrderItem.objects.create(
+                    order=order,
+                    product=item.product,
+                    quantity=item.quantity,
+                    price=item.product.price
+                )
+
+            # Clear the cart
+            cart.items.all().delete()
+
+            order_serializer = OrderSerializer(order)
+            return Response(
+                {
+                    "message": "Order created successfully",
+                    "order": order_serializer.data
+                },
+                status=status.HTTP_201_CREATED
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class OrderList(APIView):
+    """Get all orders for authenticated user"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if request.user.is_authenticated:
+            orders = Order.objects.filter(user=request.user).order_by('-created_at')
+        else:
+            return Response(
+                {'error': 'Authentication required'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data)
+
+
+class OrderDetail(APIView):
+    """Get details of a specific order"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk)
+            
+            # Check if user owns this order
+            if order.user != request.user and not request.user.is_staff:
+                return Response(
+                    {'error': 'You do not have permission to view this order'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            serializer = OrderSerializer(order)
+            return Response(serializer.data)
+        except Order.DoesNotExist:
+            return Response(
+                {'error': 'Order not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
